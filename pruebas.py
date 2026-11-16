@@ -1,7 +1,7 @@
 from datetime import date
 from pathlib import Path
-from base_datos.base_datos import conectar, crear_tablas, guardar_socio, buscar_socio_por_usuario, guardar_cuota, listar_cuotas_de_socio, guardar_club, guardar_actividad, anotar_socio_actividad, listar_actividades_de_socio, desanotar_socio_actividad, _obtener_id_socio, anotar_socio_clubes
-from modelo.socio import Socio
+from base_datos.base_datos import conectar, crear_tablas, guardar_socio, buscar_socio_por_usuario, guardar_cuota, listar_cuotas_de_socio, guardar_club, guardar_actividad, anotar_socio_actividad, listar_actividades_de_socio, desanotar_socio_actividad, _obtener_id_socio, anotar_socio_clubes, listar_cuotas, pagar_cuota
+from modelo.socio import Socio  
 from modelo.cuota import Cuota
 from modelo.club import Club
 from modelo.actividades import Actividad
@@ -96,3 +96,9 @@ actividadcita = Actividad(
 
 # anotar_socio_clubes(conexion, "bubu","Boca Juniors" )
 # print("Se anoto al socio")
+
+
+# listar_cuotas(conexion,"bubu")
+# # print("se listo la cuota")
+# pagar_cuota(conexion, "bubu","25" )
+# print("se pago la cuota")

@@ -376,3 +376,47 @@ def listar_socios(conexion):
         FROM socios
     """)
     return [construir_socio(fila) for fila in cursor.fetchall()]
+
+
+
+
+def listar_cuotas(conexion, usuario):
+    """Devuelve una lista de objetos Cuota del socio (vacía si no tiene)."""
+    cursor = conexion.cursor()
+    cursor.execute("""
+        SELECT c.periodo, c.estado, c.fecha_de_vencimiento
+        FROM cuotas c
+        JOIN socios s ON s.id = c.socio_id
+        WHERE s.usuario = ?
+    """, (usuario,))
+
+    return [Cuota(periodo, estado, fecha_de_vencimiento)
+            for periodo, estado, fecha_de_vencimiento
+            in cursor.fetchall()]
+
+
+
+def pagar_cuota(conexion, usuario, periodo):
+    """Marca como pagada la cuota del período indicado."""
+    cursor = conexion.cursor()
+
+    socio_id = _obtener_id_socio(conexion, usuario)
+    if socio_id is None:
+        return "El socio no existe."
+
+    cursor.execute(
+        "SELECT estado FROM cuotas WHERE socio_id = ? AND periodo = ?",
+        (socio_id, periodo)
+    )
+    fila = cursor.fetchone()
+    if fila is None:
+        return f"No existe la cuota del período {periodo}."
+    if fila[0] == "pagada":
+        return f"La cuota {periodo} ya estaba pagada."
+
+    cursor.execute(
+        "UPDATE cuotas SET estado = 'pagada' WHERE socio_id = ? AND periodo = ?",
+        (socio_id, periodo)
+    )
+    conexion.commit()
+    return f"Cuota {periodo} pagada."

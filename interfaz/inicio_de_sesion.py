@@ -22,7 +22,6 @@ class LoginBocaHandball(ctk.CTk):
         
         # Color de fondo principal (Azul Oscuro)
         self.configure(fg_color="#0A182E")
-
         self.crear_interfaz()
 
     def crear_interfaz(self):
