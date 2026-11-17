@@ -7,7 +7,7 @@ from base_datos.base_datos import (
     conectar,
     guardar_socio,
     listar_clubes_de_socio as listar_clubes_en_bd,
-    listar_socios as listar_clubes_en_bd,
+    listar_socios as listar_socios_en_bd,
 )
 from modelo.socio import Socio
 
@@ -16,9 +16,19 @@ RUTA_DB = Path(__file__).parent.parent / "club.db"
 
 
 def listar_socios():
+    """Devuelve la lista de objetos Socio registrados en el club."""
     conexion = conectar(str(RUTA_DB))
     try:
-        return None
+        return listar_socios_en_bd(conexion)
+    finally:
+        conexion.close()
+
+
+def obtener_socio(usuario):
+    """Devuelve el Socio con ese usuario, o None si no existe."""
+    conexion = conectar(str(RUTA_DB))
+    try:
+        return buscar_socio_por_usuario(conexion, usuario)
     finally:
         conexion.close()
 
@@ -40,6 +50,12 @@ def registrar_socio(nombre, edad, tipo_identificacion, identificacion,
         # 1) Validar primero
         if not nombre or not usuario or not contrasenia:
             raise ValueError("Nombre, usuario y contraseña son obligatorios.")
+        if not identificacion:
+            raise ValueError("La identificación es obligatoria.")
+        try:
+            edad = int(edad)
+        except (TypeError, ValueError):
+            raise ValueError("La edad debe ser un número.")
         if edad <= 0:
             raise ValueError("La edad debe ser mayor a 0.")
         if buscar_socio_por_usuario(conexion, usuario) is not None:

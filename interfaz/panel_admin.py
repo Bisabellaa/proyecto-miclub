@@ -12,11 +12,13 @@ from interfaz.tema import (
     PANEL,
     PRIMARIO,
     TEXTO,
+    crear_boton,
+    crear_boton_menu,
+    estilizar_tablas,
 )
 from servicios.servicio_cuotas import listar_cuotas
 from servicios.servicio_socios import (
     listar_socios,
-    obtener_socio,
     reactivar_socio,
     registrar_socio,
     suspender_socio,
@@ -33,31 +35,66 @@ CAMPOS_REGISTRO = [
 ]
 
 
-class PanelAdmin(tk.Frame):
-    """Pantallas que ve el administrador dentro de la ventana principal."""
+class PanelAdmin(tk.Toplevel):
+    """Ventana de administración que se abre sobre el login."""
 
-    def __init__(self, app, socio):
-        super().__init__(app.contenido, bg=PANEL)
-        self.app = app
+    def __init__(self, master, socio):
+        super().__init__(master)
         self.usuario = socio.get_usuario()
         self._usuarios = []
-        self.pack(fill="both", expand=True)
+
+        self.title("Boca Juniors - Handball | Panel de Administración")
+        self.geometry("900x620")
+        self.minsize(820, 560)
+        self.configure(bg=PANEL)
+        estilizar_tablas(self)
+
+        self._crear_menu()
+        self.contenido = tk.Frame(self, bg=PANEL)
+        self.contenido.pack(side="right", fill="both", expand=True, padx=12, pady=12)
+
+        self.mostrar_inicio()
+
+    def _crear_menu(self):
+        self.menu = tk.Frame(self, bg=PANEL, width=210)
+        self.menu.pack(side="left", fill="y")
+        self.menu.pack_propagate(False)
+
+        tk.Label(
+            self.menu,
+            text="MENÚ ADMIN",
+            font=FUENTE_NEGRITA,
+            bg=PANEL,
+            fg=PRIMARIO,
+        ).pack(pady=(25, 15))
+
+        for texto, comando in self.botones_menu():
+            crear_boton_menu(self.menu, texto, comando).pack(fill="x", padx=8, pady=3)
+
+    def _refrescar_menu(self):
+        for elemento in self.menu.winfo_children()[1:]:
+            elemento.destroy()
+        for texto, comando in self.botones_menu():
+            crear_boton_menu(self.menu, texto, comando).pack(fill="x", padx=8, pady=3)
 
     def botones_menu(self):
         return [
             ("Inicio", self.mostrar_inicio),
             ("Socios", self.mostrar_socios),
             ("Registrar socio", self.mostrar_registro),
-            ("Cerrar sesión", self.app.cerrar_sesion),
+            ("Cerrar sesión", self.cerrar_sesion),
         ]
 
+    def cerrar_sesion(self):
+        self.master.al_cerrar_panel(self)
+
     def _limpiar(self):
-        for elemento in self.winfo_children():
+        for elemento in self.contenido.winfo_children():
             elemento.destroy()
 
     def _crear_titulo(self, texto):
         tk.Label(
-            self,
+            self.contenido,
             text=texto,
             font=FUENTE_TITULO,
             bg=PANEL,
@@ -74,7 +111,7 @@ class PanelAdmin(tk.Frame):
         activos = [s for s in socios if s.estado == "Activo"]
         suspendidos = [s for s in socios if s.estado == "Suspendido"]
 
-        tarjeta = tk.Frame(self, bg=PANEL)
+        tarjeta = tk.Frame(self.contenido, bg=PANEL)
         tarjeta.pack(pady=20)
 
         self._crear_tarjeta(tarjeta, "Socios registrados", str(len(socios)),
@@ -87,7 +124,7 @@ class PanelAdmin(tk.Frame):
                             ESTADO_SUSPENDIDO).grid(row=0, column=2, padx=12)
 
         tk.Label(
-            self,
+            self.contenido,
             text=f"Sesión de {self.usuario}. Desde el menú podés gestionar los socios.",
             font=FUENTE,
             bg=PANEL,
@@ -119,7 +156,7 @@ class PanelAdmin(tk.Frame):
 
         columnas = ("usuario", "nombre", "estado", "inscripcion", "pendientes")
         tabla = ttk.Treeview(
-            self,
+            self.contenido,
             columns=columnas,
             show="headings",
             style="Club.Treeview",
@@ -142,17 +179,17 @@ class PanelAdmin(tk.Frame):
         tabla.tag_configure("Suspendido", foreground=ESTADO_SUSPENDIDO)
         tabla.pack(fill="both", expand=True, padx=30, pady=(5, 10))
 
-        fila_botones = tk.Frame(self, bg=PANEL)
+        fila_botones = tk.Frame(self.contenido, bg=PANEL)
         fila_botones.pack(pady=(0, 10))
 
-        self.app.crear_boton(
+        crear_boton(
             fila_botones,
             "SUSPENDER",
             lambda: self._cambiar_estado(tabla, suspender_socio),
             ancho=14,
         ).pack(side="left", padx=6)
 
-        self.app.crear_boton(
+        crear_boton(
             fila_botones,
             "REACTIVAR",
             lambda: self._cambiar_estado(tabla, reactivar_socio),
@@ -170,7 +207,7 @@ class PanelAdmin(tk.Frame):
 
         if not socios:
             tk.Label(
-                self,
+                self.contenido,
                 text="No hay socios registrados",
                 font=FUENTE,
                 bg=PANEL,
@@ -219,7 +256,7 @@ class PanelAdmin(tk.Frame):
         self._crear_titulo("REGISTRAR NUEVO SOCIO")
 
         tk.Label(
-            self,
+            self.contenido,
             text="Los campos marcados con * son obligatorios. "
                  "El socio se crea con estado Activo.",
             font=FUENTE_CHICA,
@@ -227,7 +264,7 @@ class PanelAdmin(tk.Frame):
             fg=TEXTO,
         ).pack()
 
-        formulario = tk.Frame(self, bg=PANEL)
+        formulario = tk.Frame(self.contenido, bg=PANEL)
         formulario.pack(pady=15)
 
         campos = {}
@@ -249,8 +286,8 @@ class PanelAdmin(tk.Frame):
             entrada.grid(row=fila, column=1, pady=5)
             campos[clave] = entrada
 
-        self.app.crear_boton(
-            self,
+        crear_boton(
+            self.contenido,
             "GUARDAR SOCIO",
             lambda: self._guardar(campos),
             ancho=22,

@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import date
+from modelo.actividades import Actividad
 from modelo.cuota import Cuota
 from modelo.socio import Socio
 from modelo.club import Club
@@ -62,6 +63,7 @@ def crear_tablas(conexion):
     cursor = conexion.cursor()
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS actividades(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL,
         dia TEXT NOT NULL,
         horario TEXT NOT NULL
@@ -85,10 +87,45 @@ def crear_tablas(conexion):
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS socio_club (
         socio_id INTEGER REFERENCES socios(id),
-        club_id  INTEGER REFERENCES clubes(id),
+        club_id  INTEGER REFERENCES clubes(club_id),
         PRIMARY KEY (socio_id, club_id)
     )
 """)
+    conexion.commit()
+
+    _migrar_actividades(conexion)
+    _normalizar_estados(conexion)
+
+
+def _migrar_actividades(conexion):
+    """Si la tabla actividades vieja no tiene columna id, la reconstruye
+    conservando sus datos."""
+    cursor = conexion.cursor()
+    columnas = [fila[1] for fila in cursor.execute("PRAGMA table_info(actividades)")]
+    if columnas and "id" not in columnas:
+        cursor.execute("ALTER TABLE actividades RENAME TO actividades_vieja")
+        cursor.execute("""
+            CREATE TABLE actividades(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                dia TEXT NOT NULL,
+                horario TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO actividades (nombre, dia, horario)
+            SELECT nombre, dia, horario FROM actividades_vieja
+        """)
+        cursor.execute("DROP TABLE actividades_vieja")
+        conexion.commit()
+
+
+def _normalizar_estados(conexion):
+    """Homogeneiza los estados de cuotas guardados en minúscula."""
+    cursor = conexion.cursor()
+    cursor.execute("UPDATE cuotas SET estado = 'Pendiente' WHERE estado = 'pendiente'")
+    cursor.execute("UPDATE cuotas SET estado = 'Pagada' WHERE estado = 'pagada'")
+    cursor.execute("UPDATE cuotas SET estado = 'Vencida' WHERE estado = 'vencida'")
     conexion.commit()
 
 def guardar_socio(conexion, socio):
@@ -148,15 +185,15 @@ def listar_cuotas_de_socio(conexion, usuario):
 
     socio_id = fila[0]
 
-        # Traer todas las cuotas de ese socio
+    # Traer todas las cuotas de ese socio
     cursor.execute(
-        "SELECT periodo, estado, fecha_vencimiento FROM cuotas WHERE socio_id = ?",
+        "SELECT periodo, estado, fecha_de_vencimiento FROM cuotas WHERE socio_id = ?",
         (socio_id,)
     )
 
     cuotas = []
-    for periodo, estado, fecha_vencimiento in cursor.fetchall():
-        cuota = Cuota(estado, date.fromisoformat(fecha_vencimiento), periodo)
+    for periodo, estado, fecha_de_vencimiento in cursor.fetchall():
+        cuota = Cuota(estado, fecha_de_vencimiento, periodo)
         cuotas.append(cuota)
     return cuotas
 
@@ -187,16 +224,17 @@ def construir_socio(fila):
 
 #guardar club
 def guardar_club(conexion, clubes):
-    """Guarda el club en la tabla clubes (solo si no existe uno)."""
+    """Guarda el club en la tabla clubes (solo si no existe uno).
+    Devuelve el club_id (nuevo o existente)."""
     cursor = conexion.cursor()
 
-    cursor.execute("SELECT * FROM clubes")
+    cursor.execute("SELECT club_id FROM clubes")
     fila = cursor.fetchone()
     if fila is not None:
         return fila[0]
 
     cursor.execute(
-        "INSERT INTO clubes (nombre, descripcion,ubicacion, presidente, fecha_fundacion) VALUES (?, ?, ?, ?, ?)", 
+        "INSERT INTO clubes (nombre, descripcion,ubicacion, presidente, fecha_fundacion) VALUES (?, ?, ?, ?, ?)",
         (
         clubes.nombre,
         clubes.descripcion,
@@ -205,25 +243,29 @@ def guardar_club(conexion, clubes):
         clubes.get_fecha_fundacion()
         ))
     conexion.commit()
+    return cursor.lastrowid
 
 
 
-def guardar_actividad(conexion, socio_actividades):
+def guardar_actividad(conexion, actividad):
+    """Guarda una actividad. Si ya existe una con el mismo nombre, no la
+    duplica. Devuelve el id de la actividad (nuevo o existente)."""
     cursor = conexion.cursor()
 
-    cursor.execute("SELECT * FROM actividades") 
+    cursor.execute("SELECT id FROM actividades WHERE nombre = ?", (actividad.nombre,))
     fila = cursor.fetchone()
     if fila is not None:
         return fila[0]
-    
+
     cursor.execute(
-        "INSERT INTO actividades (nombre, dia, horario ) VALUES (?,?,?)",
+        "INSERT INTO actividades (nombre, dia, horario) VALUES (?,?,?)",
         (
-        socio_actividades.nombre,
-        socio_actividades.dia,
-        socio_actividades.horario
+        actividad.nombre,
+        actividad.dia,
+        actividad.horario
         ))
     conexion.commit()
+    return cursor.lastrowid
     
 
 def anotar_socio_actividad(conexion, usuario, nombre_actividad):
@@ -243,7 +285,7 @@ def anotar_socio_actividad(conexion, usuario, nombre_actividad):
     actividad_id = fila[0]
 
     cursor.execute(
-        "INSERT OR IGNORE INTO actividades (socio_id, actividad_id) VALUES (?, ?)",
+        "INSERT OR IGNORE INTO socio_actividad (socio_id, actividad_id) VALUES (?, ?)",
         (socio_id, actividad_id)
     )
     conexion.commit()
@@ -275,10 +317,11 @@ def desanotar_socio_actividad(conexion, usuario, nombre_actividad):
         (fila_socio[0], fila_actividad[0]),
     )
     conexion.commit()
-
+    return cursor.rowcount > 0
 
 
 def listar_actividades_de_socio(conexion, usuario):
+    """Devuelve una lista de objetos Actividad a los que está anotado el socio."""
     cursor = conexion.cursor()
     cursor.execute("""
         SELECT a.nombre, a.dia, a.horario FROM actividades a
@@ -287,22 +330,8 @@ def listar_actividades_de_socio(conexion, usuario):
         WHERE s.usuario = ?
     """, (usuario,))
 
-    return [listar_actividades_de_socio(nombre, dia, horario)
-    for nombre, dia, horario in cursor.fetchall()]
-
-
-def desanotar_socio_actividad(conexion, socio_id, actividad_id):
-    """Elimina la relación entre un socio y una actividad en la tabla intermedia."""
-    cursor = conexion.cursor()
-    cursor.execute(
-        "DELETE FROM socio_actividad WHERE socio_id = ? AND actividad_id = ?",
-        (socio_id, actividad_id)
-    )
-    conexion.commit()
-
-
-
-
+    return [Actividad(nombre, dia, horario)
+            for nombre, dia, horario in cursor.fetchall()]
 
 
 def _obtener_id_socio(conexion, usuario):
@@ -411,11 +440,11 @@ def pagar_cuota(conexion, usuario, periodo):
     fila = cursor.fetchone()
     if fila is None:
         return f"No existe la cuota del período {periodo}."
-    if fila[0] == "pagada":
+    if fila[0] == "Pagada":
         return f"La cuota {periodo} ya estaba pagada."
 
     cursor.execute(
-        "UPDATE cuotas SET estado = 'pagada' WHERE socio_id = ? AND periodo = ?",
+        "UPDATE cuotas SET estado = 'Pagada' WHERE socio_id = ? AND periodo = ?",
         (socio_id, periodo)
     )
     conexion.commit()

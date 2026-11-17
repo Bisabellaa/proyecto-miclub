@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -15,20 +14,49 @@ from interfaz.tema import (
     PANEL,
     PRIMARIO,
     TEXTO,
+    crear_boton,
+    crear_boton_menu,
+    estilizar_tablas,
 )
 from servicios.servicio_cuotas import listar_cuotas, pagar_cuota
 from servicios.servicio_socios import listar_clubes_de_socio, obtener_socio
 
 
-class PanelSocio(tk.Frame):
-    """Pantallas que ve el socio dentro de la ventana principal."""
+class PanelSocio(tk.Toplevel):
+    """Ventana del socio que se abre sobre el login."""
 
-    def __init__(self, app, socio):
-        super().__init__(app.contenido, bg=PANEL)
-        self.app = app
+    def __init__(self, master, socio):
+        super().__init__(master)
         self.usuario = socio.get_usuario()
         self._periodos = []
-        self.pack(fill="both", expand=True)
+
+        self.title("Boca Juniors - Handball | Panel del Socio")
+        self.geometry("900x620")
+        self.minsize(820, 560)
+        self.configure(bg=PANEL)
+        estilizar_tablas(self)
+
+        self._crear_menu()
+        self.contenido = tk.Frame(self, bg=PANEL)
+        self.contenido.pack(side="right", fill="both", expand=True, padx=12, pady=12)
+
+        self.mostrar_inicio()
+
+    def _crear_menu(self):
+        self.menu = tk.Frame(self, bg=PANEL, width=210)
+        self.menu.pack(side="left", fill="y")
+        self.menu.pack_propagate(False)
+
+        tk.Label(
+            self.menu,
+            text="MENÚ PRINCIPAL",
+            font=FUENTE_NEGRITA,
+            bg=PANEL,
+            fg=PRIMARIO,
+        ).pack(pady=(25, 15))
+
+        for texto, comando in self.botones_menu():
+            crear_boton_menu(self.menu, texto, comando).pack(fill="x", padx=8, pady=3)
 
     def botones_menu(self):
         return [
@@ -36,16 +64,19 @@ class PanelSocio(tk.Frame):
             ("Mis datos", self.mostrar_datos),
             ("Mis clubes", self.mostrar_clubes),
             ("Mis cuotas", self.mostrar_cuotas),
-            ("Cerrar sesión", self.app.cerrar_sesion),
+            ("Cerrar sesión", self.cerrar_sesion),
         ]
 
+    def cerrar_sesion(self):
+        self.master.al_cerrar_panel(self)
+
     def _limpiar(self):
-        for elemento in self.winfo_children():
+        for elemento in self.contenido.winfo_children():
             elemento.destroy()
 
     def _crear_titulo(self, texto):
         tk.Label(
-            self,
+            self.contenido,
             text=texto,
             font=FUENTE_TITULO,
             bg=PANEL,
@@ -65,7 +96,7 @@ class PanelSocio(tk.Frame):
 
         if socio is None:
             messagebox.showerror("Error", "El socio ya no existe.")
-            self.app.cerrar_sesion()
+            self.cerrar_sesion()
             return
 
         self._crear_titulo(f"¡Bienvenido/a, {socio.nombre_completo}!")
@@ -75,7 +106,7 @@ class PanelSocio(tk.Frame):
             cuota for cuota in cuotas if cuota.get_estado() in ("Pendiente", "Vencida")
         ]
 
-        tarjeta = tk.Frame(self, bg=PANEL)
+        tarjeta = tk.Frame(self.contenido, bg=PANEL)
         tarjeta.pack(pady=20)
 
         self._crear_tarjeta(tarjeta, "Estado", socio.estado,
@@ -86,7 +117,7 @@ class PanelSocio(tk.Frame):
                             ESTADO_PENDIENTE).grid(row=0, column=1, padx=12)
 
         tk.Label(
-            self,
+            self.contenido,
             text="Usá el menú para ver tus datos, tus clubes y tus cuotas.",
             font=FUENTE,
             bg=PANEL,
@@ -118,12 +149,12 @@ class PanelSocio(tk.Frame):
 
         if socio is None:
             messagebox.showerror("Error", "El socio ya no existe.")
-            self.app.cerrar_sesion()
+            self.cerrar_sesion()
             return
 
         self._crear_titulo("MIS DATOS")
 
-        tabla = tk.Frame(self, bg=PANEL)
+        tabla = tk.Frame(self.contenido, bg=PANEL)
         tabla.pack(pady=10)
 
         valores = [
@@ -176,7 +207,7 @@ class PanelSocio(tk.Frame):
 
         if not clubes:
             tk.Label(
-                self,
+                self.contenido,
                 text="Sin clubes asociados",
                 font=FUENTE,
                 bg=PANEL,
@@ -186,13 +217,15 @@ class PanelSocio(tk.Frame):
 
         for club in clubes:
             tk.Label(
-                self,
-                text=f"• {club.informacion()}",
+                self.contenido,
+                text=f"• {club.mostrar_info()}",
                 font=FUENTE,
                 bg=PANEL,
                 fg=TEXTO,
                 anchor="w",
-            ).pack(fill="x", padx=60, pady=4)
+                wraplength=560,
+                justify="left",
+            ).pack(fill="x", padx=40, pady=4)
 
     def mostrar_cuotas(self):
         self._limpiar()
@@ -200,7 +233,7 @@ class PanelSocio(tk.Frame):
 
         columnas = ("periodo", "estado", "vencimiento")
         tabla = ttk.Treeview(
-            self,
+            self.contenido,
             columns=columnas,
             show="headings",
             style="Club.Treeview",
@@ -220,8 +253,8 @@ class PanelSocio(tk.Frame):
         tabla.tag_configure("Vencida", foreground=ESTADO_VENCIDO)
         tabla.pack(fill="both", expand=True, padx=40, pady=(5, 10))
 
-        boton_pagar = self.app.crear_boton(
-            self,
+        boton_pagar = crear_boton(
+            self.contenido,
             "PAGAR CUOTA SELECCIONADA",
             lambda: self._pagar(tabla),
             ancho=25,
@@ -239,7 +272,7 @@ class PanelSocio(tk.Frame):
 
         if not cuotas:
             tk.Label(
-                self,
+                self.contenido,
                 text="Sin cuotas cargadas",
                 font=FUENTE,
                 bg=PANEL,
@@ -254,7 +287,7 @@ class PanelSocio(tk.Frame):
             tabla.insert(
                 "",
                 "end",
-                values=(cuota.periodo, cuota.get_estado(), cuota.fecha_vencimiento),
+                values=(cuota.periodo, cuota.get_estado(), cuota.fecha_de_vencimiento),
                 tags=(rayado, cuota.get_estado()),
             )
             self._periodos.append(cuota.periodo)
@@ -272,4 +305,3 @@ class PanelSocio(tk.Frame):
         messagebox.showinfo("Pagar cuota", mensaje)
 
         self.mostrar_cuotas()
-
